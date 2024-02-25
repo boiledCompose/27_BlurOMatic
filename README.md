@@ -98,8 +98,9 @@ WorkRequest에는 2가지 유형이 있다. 이 예제에선 첫 번째 유형�
 - `OneTimeWorkRequest`: 한 번만 실행된다.
 - `PeriodicWorkRequest`: 일정 주기로 반복적으로 실행된다.
 
-1. `OneTimeWorkerRequestBuilder`라는 확장 함수를 사용해 worker용 `OneTimeWorkRequest` 객체를 만든다.
+1. 저장소 클래스 안에 `OneTimeWorkerRequestBuilder`라는 확장 함수를 사용해 worker용 `OneTimeWorkRequest` 객체를 만든다.
 ```kotlin
+//WorkManagerBluromaticRepository.kt
 fun applyBlur(blurLevel: Int){
     val blurBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
 }
@@ -116,5 +117,82 @@ fun applyBlur(blurLevel: Int){
 }
 ```
 
+## 입력 데이터 객체 만들기
+Worker의 안팎에서 `Data` 객체를 통해 입력과 출력을 전달할 수 있다. `Data`는 키-값 쌍의 가벼운 컨테이너로 소량의 데이터를 저장하기에 안성맞춤이다.
+
+1. `Data` 객체를 생성하고 반환하는 함수를 선언한다.
+```kotlin
+private fun createInputDataForWorkRequest(blurLevel: Int, imageUri: Uri): Data {
+    val builder = Data.Builder()
+    builder.putString(KEY_IMAGE_URI, imageUri.toString()).putInt(BLUR_LEVEL, blurLevel)
+    return builder.build()
+}
+```
+
+2. `WorkRequestBuilder`의 `setInputData()`메서드를 통해 생성한 `Data` 객체를 넘겨준다.
+```kotlin
+override fun applyBlur(blurLevel: Int) {
+     // Create WorkRequest to blur the image
+    val blurBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
+
+    // New code for input data object
+    blurBuilder.setInputData(createInputDataForWorkRequest(blurLevel, imageUri))
+
+    workManager.enqueue(blurBuilder.build())
+} 
+```
+
+3. Worker 객체에서 입력 데이터에 접근하려면 `inputData`의 `getString()`, `getInt()`와 같은 메서드를 사용한다.
+```kotlin
+override fun doWork(): Result {
+    val resourceUri = inputData.getString(KEY_IMAGE_URI)
+    val blurLevel = inputData.getInt(KEY_BLUR_LEVEL, 1)
+    ...
+}
+```
+
+4. 전달받은 데이터의 존재 여부를 확인하고 데이터를 사용하도록 한다. `require`문은 조건을 충족하지 않으면 블록 내 코드를 실행한다.
+```kotlin
+return@withContext try {
+    // NEW code
+    require(!resourceUri.isNullOrBlank()) {
+        val errorMessage =
+            applicationContext.resources.getString(R.string.invalid_input_uri)
+            Log.e(TAG, errorMessage)
+            errorMessage
+    }
+```
+
+## 출력 데이터 객체 만들기
+출력 데이터도 동일하게 `Data` 객체를 생성하여 만들어낸다.
+
+1. `Result.success()`의 인자로 `Data` 객체를 넘겨서 출력으로 내보낼 수 있다.
+   `workDataOf`로 키-값 쌍의 데이터 객체를 만들 수 있다.
+```kotlin
+val outputData = workDataOf(KEY_IMAGE_URI to outputUri.toString())
+Result.success(outputData)
+```
+
+## 작업 체이닝
+WorkManager는 작업 체인 기능을 지원한다. 이는 순서대로 실행되거나 동시에 실행되는 별도의 `WorkerRequest`를 만들 수 있다.
+
+1. `WorkManager`의 `beginWith()` 메서드를 호출하여 제일 처음 실행할 `WorkRequest`를 지정한다. `beginWith()`는 `WorkContinuation` 객체를 반환하고 체인의 시작점이 된다.
+```
+override fun applyBlur(blurLevel: Int) {
+    var continuation = workManager.beginWith(OneTimeWorkRequest.from(CleanupWorker::class.java))
+    ...
+}       
+```
+
+2. `then()` 메서드를 호출하고 `WorkRequest`객체를 전달하여 이 작업 요청 체인에 추가할 수 있다.
+```kotlin
+val blurBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
+continuation = continuation.then(blurBuilder.build())
+```
+
+3. 작업을 시작하려면 `enqueue()` 메서드를 호출한다.
+```kotlin
+continuation.enqueue()
+```
 
 

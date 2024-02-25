@@ -54,8 +54,67 @@ val outputUri = writeBitmapToFile(applicationContext, output)
 Result.Success()
 ```
 
-4. 
+4. `catch` 블록엔 에러 메세지를 기록한다.
+```kotlin
+//inside doWork()
+} catch (throwable: Throwable) {
+    Log.e(
+    TAG,
+    applicationContext.resources.getString(R.string.error_applying_blur),
+        throwable
+    )
 
+    Result.failure()
+}
+```
+
+5. `CoroutineWorker`는 기본적으로 `Dispatchers.Default`로 실행된다. `withContext()`를 호출하고 원하는 디스패처를 전달하여 변경할 수 있다.
+```kotlin
+//inside doWork(), wrapping try-catch block
+return withContext(Dispatchers.IO) {
+    ...
+}
+
+6. 람다 함수 내에서 return을 호출할 수 없어서 `try-catch` 블록의 return에서 에러가 발생한다. 이러한 경우 상태를 직접 표시하는 라벨을 부착한다.
+```kotlin
+return withContext(Dispatchers.IO) {
+    return@withContext try{
+        ...
+    } catch ...
+}
+```
+
+7. worker는 매우 빨리 실행된다. 따라서 약간의 지연을 추가해서 작업의 속도를 늦추도록 한다.
+```kotlin
+return withContext(Dispatchers.IO) {
+    delay(DELAY_TIME_MILLIS)
+    ...
+}
+```
+
+### WorkRequest 추가
+WorkRequest에는 2가지 유형이 있다. 이 예제에선 첫 번째 유형을 사용한다.
+
+- `OneTimeWorkRequest`: 한 번만 실행된다.
+- `PeriodicWorkRequest`: 일정 주기로 반복적으로 실행된다.
+
+1. `OneTimeWorkerRequestBuilder`라는 확장 함수를 사용해 worker용 `OneTimeWorkRequest` 객체를 만든다.
+```kotlin
+fun applyBlur(blurLevel: Int){
+    val blurBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
+}
+```
+
+2. `workManager` 객체의 `enqueue` 메서드를 통해 `WorkRequest`를 실행 큐에 넣는다.
+```kotlin
+val workManager = WorkManager.getInstance(context)
+
+fun applyBlur(blurLevel: Int){
+    val blurBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
+    
+    workManager.enqueue(blurBuilder.build())
+}
+```
 
 
 

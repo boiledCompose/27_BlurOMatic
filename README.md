@@ -1,39 +1,61 @@
-WorkManager Codelab
-===================================
+## WorkManager
 
-This repository contains the code for the [WorkManager Codelab](https://developer.android.com/codelabs/basic-android-kotlin-compose-workmanager).
+WorkManager는 상황별 실행과 보장된 실행을 조합하여 적용해야 하는 백그라운드 작업을 위한 아키텍처 구성요소이다.
 
-Introduction
-------------
+- 상황별 싱행이란 최대한 빨리 백그라운드 작업을 실행하는 것
+- 보장된 실행이란 사용자가 앱을 벗어난 경우를 비롯한 다양한 상황에서 로직을 처리하는 것
 
-At I/O 2018, Google announced [Android Jetpack](https://developer.android.com/jetpack/), a collection of libraries, tools, and architectural guidance to accelerate and simplify the development of great Android apps. One of those libraries is the [WorkManager library](https://developer.android.com/topic/libraries/architecture/workmanager/). The WorkManager library provides a unified API for deferrable one-off or recurring background tasks that need guaranteed execution. You can learn more by reading the [WorkManager Guide](https://developer.android.com/topic/libraries/architecture/workmanager/), the [WorkManager Reference](https://developer.android.com/reference/androidx/work/package-summary) or doing the [WorkManager Codelab](https://developer.android.com/codelabs/basic-android-kotlin-compose-workmanager).
+### WorkManager 종속 항목
 
-Pre-requisites
---------------
+WorkManager는 다음과 같은 종속 항목이 필요하다.
 
-* Familiarity with how to open, build, and run apps with Android Studio.
+```kotlin
+dependencies {
+    // WorkManager dependency
+    implementation("androidx.work:work-runtime-ktx:2.8.1")  
+}
+```
 
-* Make sure Android Studio is updated, as well as your SDK and Gradle. Otherwise, you may have to wait for a while until all the updates are done.
+### BlurWorker 클래스 생성
 
-* A device or emulator that runs API level 21+
+1. `worker`는 백그라운드 스레드에서 동기식으로 작업을 실행하는 클래스이다.  
+비동기식 작업을 하기 위해선 Kotlin의 코루틴과 상호 운용되는 `CoroutineWorker`를 사용할 수 있다. `CoroutineWorker`안에는 `doWork()`메서드가 필수적으로 재정의되어야 한다.
 
-You need to be solidly familiar with the Kotlin programming language, object-oriented design concepts, and Android Development Fundamentals.
+```kotlin
+class BlurWorker(context: Context, params: WorkerParameters) : CouroutineWorker(context, params) {
+    override suspend fun doWork(): Result { ... }
+}
+```
 
-In particular:
+2. WorkManager는 `Result.success()` 및 `Result.failure()`를 사용하여 실행 중인 작업 요청의 최종 상태를 나타낸다. 따라서 `return try ..catch` 코드 블록을 추가한다.
+```kotlin
+//inside doWork()
+return try {
+    Result.success()
+} catch(throwable: Throwable) {
+    Result.failure()
+}
+```
 
-* Basics of [Jetpack Compose](https://developer.android.com/courses/pathways/compose)
-* Some familiarity with URIs and File I/O
-* Familiarity with [Kotlin Flow](https://developer.android.com/kotlin/flow) and [ViewModel](https://developer.android.com/topic/libraries/architecture/viewmodel)
+3. 변환하고자 하는 이미지를 비트맵으로 변환하여 변수에 저장한다.
+   이후에 호출되는 `blurBitmap()`은 비트맵을 블러 처리하는 메서드이고,
+   `writeBitmapToFile()`은 비트앱을 시스템에 저장하고 Uri를 반환하는 메서드이다.
+```kotlin
+//inside try block
+val picture = BitmapFactory.decodeResource(
+                applicationContext.resources,
+                R.drawable.android_cupcake
+)
 
-Getting Started
----------------
+//output's type: Bitmap
+val output = blurBitmap(picture, 1)
+val outputUri = writeBitmapToFile(applicationContext, output)
 
-1. [Install Android Studio](https://developer.android.com/studio/install.html), if you don't already have it.
-2. Download the sample.
-3. Import the sample into Android Studio.
-4. Build and run the sample.
+Result.Success()
+```
 
-Notes:
-- The application code contains a battery not low constraint. If the device/emulator has a low battery, the application will appear to hang until this constraint is met.
+4. 
 
-- The app requires notifications to be enabled. To enable notifications, navigate to the Android Settings menu > Apps > Blur-O-Matic > Notifications > Enable "All Blur-O-Matic notifications".
+
+
+
